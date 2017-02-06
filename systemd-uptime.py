@@ -6,11 +6,31 @@ from subprocess import Popen, PIPE
 
 
 def one_boot(boot, shut, susp, wake):
-    print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
+    sum = 0
 
+    print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
+    if len(wake) is not len(susp):
+        print("uneven list:", "susp =", len(susp),
+              ",", "wake =", len(wake), "(ignored)")
+        # TODO correct the lists as good as possible
+        print()
+        return datetime.timedelta(0, 0)
+
+    """
     for (s, w) in zip(susp, wake):
-        print("  Sleep: {start} -> {wake}".format(start=s, wake=w) )
+        print("  Sleep: {start} -> {wake}".format(start=s, wake=w))
+    """
+    for i in range(len(susp)):
+        if i is 0:
+            sum = susp[0] - boot
+        elif i is len(susp) - 1:
+            sum += susp[i] - wake[i - 1]
+            sum += shut - wake[i]
+        else:
+            sum += susp[i] - wake[i - 1]
+    print(sum)
     print()
+    return sum
 
 
 def main():
@@ -92,6 +112,8 @@ def main():
     suspendTimes.sort()
     wakeTimes.sort()
 
+    sum = datetime.timedelta(0, 0)
+
     for boot in boot_list:
         susp = []
         wake = []
@@ -100,7 +122,9 @@ def main():
                 susp.append(i)
             if boot[1] < j and j < boot[2]:
                 wake.append(j)
-        one_boot(boot[1], boot[2], susp, wake)
+        sum += one_boot(boot[1], boot[2], susp, wake)
+
+    print("Sum together:", sum)
 
 
 if __name__ == '__main__':
