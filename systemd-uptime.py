@@ -6,12 +6,11 @@ from subprocess import Popen, PIPE
 
 
 def one_boot(boot, shut, susp, wake):
-    print("### new session")
-    print("Bootup: " + str(boot))
-    for (i, j) in zip(susp, wake):
-        print("Suspend:", i)
-        print("Wakeup:", j)
-    print("Shutdown: " + str(shut))
+    print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
+
+    for (s, w) in zip(susp, wake):
+        print("  Sleep: {start} -> {wake}".format(start=s, wake=w) )
+    print()
 
 
 def main():
