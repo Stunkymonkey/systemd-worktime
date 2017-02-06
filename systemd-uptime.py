@@ -6,7 +6,7 @@ from subprocess import Popen, PIPE
 
 
 def one_boot(boot, shut, susp, wake):
-    sum = 0
+    sum = datetime.timedelta(0, 0)
 
     print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
     if len(wake) is not len(susp):
@@ -20,14 +20,10 @@ def one_boot(boot, shut, susp, wake):
     for (s, w) in zip(susp, wake):
         print("  Sleep: {start} -> {wake}".format(start=s, wake=w))
     """
-    for i in range(len(susp)):
-        if i is 0:
-            sum = susp[0] - boot
-        elif i is len(susp) - 1:
-            sum += susp[i] - wake[i - 1]
-            sum += shut - wake[i]
-        else:
-            sum += susp[i] - wake[i - 1]
+    up = [boot] + wake
+    down = susp + [shut]
+    for (u, d) in zip(up, down):
+        sum += d - u
     print(sum)
     print()
     return sum
@@ -63,25 +59,13 @@ def main():
         shutdown_date = datetime.datetime.strptime(
             shutdown, '%Y-%m-%d.%H:%M:%S')
         boot_list.append([bootid, bootup_date, shutdown_date])
-        # print("bootid: " + bootid)
-        # print("bootup: " + str(bootup_date))
-        # print("shutdown: " + str(shutdown_date))
 
     if boot_amount != 0:
         del boot_list[:(amount - boot_amount + 1)]
-    # print(boot_list)
 
     j = journal.Reader(journal.SYSTEM)
     j.log_level(journal.LOG_DEBUG)
 
-    """
-    j.add_match("MESSAGE=Linux version")
-    j.add_disjunction()
-    j.add_match("MESSAGE=Shutting down.")
-    j.add_disjunction()
-    j.add_match("MESSAGE=System is rebooting.")
-    j.add_disjunction()
-    """
     j.add_match("MESSAGE=Suspending system...")
     j.add_disjunction()
     j.add_match("MESSAGE=PM: Finishing wakeup.")
@@ -105,9 +89,6 @@ def main():
         except:
             continue
     j.close()
-
-    # print(len(suspendTimes))
-    # print(len(wakeTimes))
 
     suspendTimes.sort()
     wakeTimes.sort()
