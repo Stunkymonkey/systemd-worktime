@@ -15,6 +15,8 @@ def one_boot(boot, shut, susp, wake):
 
     # if lists have unequal lenght, correcting it here
     if len(wake) is not len(susp):
+        print("uneven list skipping this boot")
+        return datetime.timedelta(0, 0)
         print("uneven list, trying to repair it...")
 
         new_up = [up[0]]
@@ -73,12 +75,13 @@ def main():
     parser.add_argument("-b", "--boot",
                         type=int,
                         default=0,
-                        dest="boot_amount",
-                        help='number of boots beeing processed (0 for all)')
-    parser.add_argument("-v", action="store_true", default=False)
+                        dest="amount",
+                        help="number of boots beeing processed (0 for all)")
+    parser.add_argument("-v", action="store_true", default=False,
+                        help="verbose output")
 
     args = parser.parse_args()
-    boot_amount = int(args.boot_amount)
+    boot_amount = int(args.amount)
     global verbose
     verbose = bool(args.v)
 
