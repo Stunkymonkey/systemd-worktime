@@ -3,21 +3,26 @@ from systemd import journal
 import datetime
 import argparse
 from subprocess import Popen, PIPE
+import sys
 
 verbose = False
+quiet = False
 
 
 def one_boot(boot, shut, susp, wake):
     up = [boot] + wake
     down = susp + [shut]
 
-    print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
+    if not quiet:
+        print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
 
     # if lists have unequal lenght, correcting it here
     if len(wake) is not len(susp):
         print("uneven list skipping this boot")
         return datetime.timedelta(0, 0)
         print("uneven list, trying to repair it...")
+
+        print("TODO: {start} -> {end}".format(start=up, end=down))
 
         new_up = [up[0]]
         del up[0]
@@ -31,41 +36,38 @@ def one_boot(boot, shut, susp, wake):
                     del up[0]
                     next_is_up = False
                 else:
-                    print()
                     print("uptime conflict with",
                           up[0], "and", new_up[-1])
                     print("deleting:", new_up[-1])
                     del new_up[-1]
                     new_up.append(up[0])
                     del up[0]
-                    print()
             else:
                 if down[0] > new_up[-1]:
                     new_down.append(down[0])
                     del down[0]
                     next_is_up = True
                 else:
-                    print()
                     print("downtime conflict with:",
                           down[0], "and", new_down[-1])
                     print(new_down[-1])
                     print("deleting:", down[0])
                     del down[0]
-                    print()
 
         up = new_up
         down = new_down
 
     global verbose
-    if verbose:
+    if verbose and not quiet:
         for (s, e) in zip(up, down):
             print("  Work: {start} -> {end}".format(start=s, end=e))
 
     sum = datetime.timedelta(0, 0)
     for (u, d) in zip(up, down):
         sum += d - u
-    print(sum)
-    print()
+    if not quiet:
+        print(sum)
+        print()
     return sum
 
 
@@ -77,19 +79,27 @@ def main():
                         default=0,
                         dest="amount",
                         help="number of boots beeing processed (0 for all)")
-    parser.add_argument("-v", action="store_true", default=False,
+    parser.add_argument("-v", "--verbose", action="store_true", default=False,
                         help="verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true", default=False,
+                        help="less output")
+    parser.add_argument("-s", "--seconds", action="store_true", default=False,
+                        help="output in seconds")
 
     args = parser.parse_args()
     boot_amount = int(args.amount)
+    seconds = bool(args.seconds)
     global verbose
-    verbose = bool(args.v)
+    verbose = bool(args.verbose)
+    global quiet
+    quiet = bool(args.quiet)
 
     p = Popen(['journalctl --list-boots'], stdout=PIPE, shell=True)
     output, err = p.communicate()
     exitcode = p.wait()
     if exitcode != 0:
-        quit("Error with systemd")
+        print("Error with systemd")
+        sys.exit(1)
 
     amount = -int(output.rstrip().split()[0].decode())
     boot_list = []
@@ -149,7 +159,10 @@ def main():
                 wake.append(j)
         sum += one_boot(boot[1], boot[2], susp, wake)
 
-    print("Sum together:", sum)
+    if seconds:
+        print(int(sum.total_seconds()))
+    else:
+        print("Worktime:", sum)
 
 
 if __name__ == '__main__':
