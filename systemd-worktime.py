@@ -9,58 +9,64 @@ verbose = False
 quiet = False
 
 
+def correct_list(up, down):
+    """
+    correcting uneven lists
+    """
+    print("uneven list skipping this boot")
+    return [], []
+    print("uneven list, trying to repair it...")
+
+    print("TODO: {start} -> {end}".format(start=up, end=down))
+
+    new_up = [up[0]]
+    del up[0]
+    new_down = []
+
+    next_is_up = False
+    for i in range(len(down) * 2):
+        if next_is_up:
+            if up[0] > new_down[-1]:
+                new_up.append(up[0])
+                del up[0]
+                next_is_up = False
+            else:
+                print("uptime conflict with",
+                      up[0], "and", new_up[-1])
+                print("deleting:", new_up[-1])
+                del new_up[-1]
+                new_up.append(up[0])
+                del up[0]
+        else:
+            if down[0] > new_up[-1]:
+                new_down.append(down[0])
+                del down[0]
+                next_is_up = True
+            else:
+                print("downtime conflict with:",
+                      down[0], "and", new_down[-1])
+                print(new_down[-1])
+                print("deleting:", down[0])
+                del down[0]
+
+    return new_up, new_down
+
+
 def one_boot(boot, shut, susp, wake):
+    """
+    calculating the timedelta of one boot
+    """
     up = [boot] + wake
     down = susp + [shut]
 
+    if len(wake) is not len(susp):
+        up, down = correct_list(up, down)
+
     if not quiet:
         print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
-
-    # if lists have unequal lenght, correcting it here
-    if len(wake) is not len(susp):
-        print("uneven list skipping this boot")
-        return datetime.timedelta(0, 0)
-        print("uneven list, trying to repair it...")
-
-        print("TODO: {start} -> {end}".format(start=up, end=down))
-
-        new_up = [up[0]]
-        del up[0]
-        new_down = []
-
-        next_is_up = False
-        for i in range(len(down) * 2):
-            if next_is_up:
-                if up[0] > new_down[-1]:
-                    new_up.append(up[0])
-                    del up[0]
-                    next_is_up = False
-                else:
-                    print("uptime conflict with",
-                          up[0], "and", new_up[-1])
-                    print("deleting:", new_up[-1])
-                    del new_up[-1]
-                    new_up.append(up[0])
-                    del up[0]
-            else:
-                if down[0] > new_up[-1]:
-                    new_down.append(down[0])
-                    del down[0]
-                    next_is_up = True
-                else:
-                    print("downtime conflict with:",
-                          down[0], "and", new_down[-1])
-                    print(new_down[-1])
-                    print("deleting:", down[0])
-                    del down[0]
-
-        up = new_up
-        down = new_down
-
-    global verbose
-    if verbose and not quiet:
-        for (s, e) in zip(up, down):
-            print("  Work: {start} -> {end}".format(start=s, end=e))
+        if verbose:
+            for (s, e) in zip(up, down):
+                print("  Work: {start} -> {end}".format(start=s, end=e))
 
     sum = datetime.timedelta(0, 0)
     for (u, d) in zip(up, down):
@@ -68,7 +74,38 @@ def one_boot(boot, shut, susp, wake):
     if not quiet:
         print(sum)
         print()
+
     return sum
+
+
+def get_bootlist(boot_amount):
+    """
+    return all boots of the system
+    """
+    p = Popen(['journalctl --list-boots'], stdout=PIPE, shell=True)
+    output, err = p.communicate()
+    exitcode = p.wait()
+    if exitcode != 0:
+        print("Error with systemd")
+        sys.exit(1)
+
+    amount = -int(output.rstrip().split()[0].decode())
+    boot_list = []
+
+    for line in output.splitlines():
+        boot = line.rstrip().decode().split()
+        bootid = str(boot[1])
+        bootup = str(boot[3] + "." + boot[4])
+        shutdown = str(boot[6] + "." + boot[7])
+        bootup_date = datetime.datetime.strptime(bootup, '%Y-%m-%d.%H:%M:%S')
+        shutdown_date = datetime.datetime.strptime(
+            shutdown, '%Y-%m-%d.%H:%M:%S')
+        boot_list.append([bootid, bootup_date, shutdown_date])
+
+    if boot_amount != 0:
+        del boot_list[:(amount - boot_amount + 1)]
+
+    return boot_list
 
 
 def main():
@@ -94,28 +131,7 @@ def main():
     global quiet
     quiet = bool(args.quiet)
 
-    p = Popen(['journalctl --list-boots'], stdout=PIPE, shell=True)
-    output, err = p.communicate()
-    exitcode = p.wait()
-    if exitcode != 0:
-        print("Error with systemd")
-        sys.exit(1)
-
-    amount = -int(output.rstrip().split()[0].decode())
-    boot_list = []
-
-    for line in output.splitlines():
-        boot = line.rstrip().decode().split()
-        bootid = str(boot[1])
-        bootup = str(boot[3] + "." + boot[4])
-        shutdown = str(boot[6] + "." + boot[7])
-        bootup_date = datetime.datetime.strptime(bootup, '%Y-%m-%d.%H:%M:%S')
-        shutdown_date = datetime.datetime.strptime(
-            shutdown, '%Y-%m-%d.%H:%M:%S')
-        boot_list.append([bootid, bootup_date, shutdown_date])
-
-    if boot_amount != 0:
-        del boot_list[:(amount - boot_amount + 1)]
+    boot_list = get_bootlist(boot_amount)
 
     j = journal.Reader(journal.SYSTEM)
     j.log_level(journal.LOG_DEBUG)
