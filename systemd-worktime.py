@@ -7,17 +7,13 @@ import sys
 
 verbose = False
 quiet = False
+seconds = False
 
 
 def correct_list(up, down):
     """
     correcting uneven lists
     """
-    print("uneven list skipping this boot")
-    return [], []
-    print("uneven list, trying to repair it...")
-
-    print("TODO: {start} -> {end}".format(start=up, end=down))
 
     new_up = [up[0]]
     del up[0]
@@ -45,7 +41,6 @@ def correct_list(up, down):
             else:
                 print("downtime conflict with:",
                       down[0], "and", new_down[-1])
-                print(new_down[-1])
                 print("deleting:", down[0])
                 del down[0]
 
@@ -108,31 +103,7 @@ def get_bootlist(boot_amount):
     return boot_list
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='listing past uptimes of systemd')
-    parser.add_argument("-b", "--boot",
-                        type=int,
-                        default=0,
-                        dest="amount",
-                        help="number of boots beeing processed (0 for all)")
-    parser.add_argument("-v", "--verbose", action="store_true", default=False,
-                        help="verbose output")
-    parser.add_argument("-q", "--quiet", action="store_true", default=False,
-                        help="less output")
-    parser.add_argument("-s", "--seconds", action="store_true", default=False,
-                        help="output in seconds")
-
-    args = parser.parse_args()
-    boot_amount = int(args.amount)
-    seconds = bool(args.seconds)
-    global verbose
-    verbose = bool(args.verbose)
-    global quiet
-    quiet = bool(args.quiet)
-
-    boot_list = get_bootlist(boot_amount)
-
+def get_wake_sleep():
     j = journal.Reader(journal.SYSTEM)
     j.log_level(journal.LOG_DEBUG)
 
@@ -159,6 +130,43 @@ def main():
         except:
             continue
     j.close()
+
+    return suspendTimes, wakeTimes
+
+
+def parser():
+    parser = argparse.ArgumentParser(
+        description='listing past uptimes of systemd')
+    parser.add_argument("-b", "--boot",
+                        type=int,
+                        default=0,
+                        dest="amount",
+                        help="number of boots beeing processed (0 for all)")
+    parser.add_argument("-v", "--verbose", action="store_true", default=False,
+                        help="verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true", default=False,
+                        help="less output")
+    parser.add_argument("-s", "--seconds", action="store_true", default=False,
+                        help="output in seconds")
+
+    args = parser.parse_args()
+    boot_amount = int(args.amount)
+    global seconds
+    seconds = bool(args.seconds)
+    global verbose
+    verbose = bool(args.verbose)
+    global quiet
+    quiet = bool(args.quiet)
+
+    return boot_amount
+
+
+def main():
+    boot_amount = parser()
+
+    boot_list = get_bootlist(boot_amount)
+
+    suspendTimes, wakeTimes = get_wake_sleep()
 
     suspendTimes.sort()
     wakeTimes.sort()
