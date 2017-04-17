@@ -58,7 +58,7 @@ def one_boot(boot, shut, susp, wake):
         up, down = correct_list(up, down)
 
     if not quiet:
-        print("Boot: {tboot} -> {tshut}".format(tboot=boot, tshut=shut))
+        print("Boot: {tboot} -> {tshut}".format(tboot=up[0], tshut=down[0]))
         if verbose:
             for (s, e) in zip(up, down):
                 print("  Work: {start} -> {end}".format(start=s, end=e))
