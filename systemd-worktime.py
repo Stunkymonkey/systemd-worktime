@@ -115,11 +115,11 @@ def get_wake_sleep():
                 suspendTimes.append(
                     entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
                 continue
-            if "Finishing wakeup" in str(entry['MESSAGE']):
+            elif "Finishing wakeup" in str(entry['MESSAGE']):
                 wakeTimes.append(
                     entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
                 continue
-            if "hibernation exit" in str(entry['MESSAGE']):
+            elif "hibernation exit" in str(entry['MESSAGE']):
                 wakeTimes.append(
                     entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
                 continue
