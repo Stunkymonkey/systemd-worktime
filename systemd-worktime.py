@@ -14,35 +14,27 @@ def correct_list(up, down):
     """
     correcting uneven lists
     """
+    new_up = list()
+    new_down = list()
 
-    new_up = [up[0]]
-    del up[0]
-    new_down = []
-
-    next_is_up = False
-    for i in range(len(down) * 2):
-        if next_is_up:
-            if up[0] > new_down[-1]:
-                new_up.append(up[0])
-                del up[0]
-                next_is_up = False
-            else:
-                print("uptime conflict with",
-                      up[0], "and", new_up[-1])
-                print("deleting:", new_up[-1])
-                del new_up[-1]
-                new_up.append(up[0])
-                del up[0]
-        else:
-            if down[0] > new_up[-1]:
-                new_down.append(down[0])
-                del down[0]
-                next_is_up = True
-            else:
-                print("downtime conflict with:",
-                      down[0], "and", new_down[-1])
-                print("deleting:", down[0])
-                del down[0]
+    up_index, down_index = 0, 0
+    while True:
+        # leave out all boot that have not a direct shutdown behind
+        while (up_index < len(up) - 1) and (up[up_index + 1] < down[down_index]):
+            print("skip boot:", up[up_index], "(direct shutdown was not found)")
+            up_index += 1
+        # add valid boot and shutdown
+        if down[down_index] > up[up_index]:
+            new_down.append(down[down_index])
+            new_up.append(up[up_index])
+            up_index += 1
+            down_index += 1
+        if up_index >= len(up):
+            break
+        # leave out all shutdown out without boots
+        while up[up_index] > down[down_index]:
+            print("skip shutdown:", down[down_index], "(direct boot was not found)")
+            down_index += 1
 
     return new_up, new_down
 
