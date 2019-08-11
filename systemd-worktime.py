@@ -110,6 +110,8 @@ def get_wake_sleep():
     j.add_match("MESSAGE=Suspending system...")
     j.add_disjunction()
     j.add_match("MESSAGE=PM: Finishing wakeup.")
+    j.add_disjunction()
+    j.add_match("MESSAGE=PM: hibernation exit")
 
     suspendTimes = []
     wakeTimes = []
@@ -122,6 +124,10 @@ def get_wake_sleep():
                     entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
                 continue
             if "Finishing wakeup" in str(entry['MESSAGE']):
+                wakeTimes.append(
+                    entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
+                continue
+            if "hibernation exit" in str(entry['MESSAGE']):
                 wakeTimes.append(
                     entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
                 continue
