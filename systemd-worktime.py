@@ -5,6 +5,9 @@ import argparse
 from subprocess import Popen, PIPE
 import sys
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Boot:
@@ -26,9 +29,7 @@ class Boot:
         self.wakeTimes.append(wake)
         self.wakeTimes.sort()
 
-    def total_uptime(
-        self, quiet: bool = False, verbose: bool = False
-    ) -> datetime.timedelta:
+    def total_uptime(self) -> datetime.timedelta:
         """
         Calculate the total uptime for this boot session, considering suspends/wakes.
         """
@@ -41,19 +42,16 @@ class Boot:
             up_times, down_times = correct_list(up_times, down_times)
 
         # Print info
-        if not quiet:
-            print(f"\nBoot {self.bootid}: {up_times[0]} -> {down_times[-1]}")
-            if verbose:
-                for start, end in zip(up_times, down_times):
-                    print(f"\tWork: {start} -> {end}")
+        logger.info(f"Boot {self.bootid}: {up_times[0]} -> {down_times[-1]}")
+        for start, end in zip(up_times, down_times):
+            logger.debug(f"\tWork: {start} -> {end}")
 
         # Sum all uptimes
         total = datetime.timedelta(0)
         for start, end in zip(up_times, down_times):
             total += end - start
 
-        if not quiet:
-            print(total)
+        logger.info(total)
 
         return total
 
@@ -76,7 +74,7 @@ def correct_list(up, down):
         if current_up < current_down:
             # Check if there's a subsequent 'up' before this 'down'
             if up_idx + 1 < len(up) and up[up_idx + 1] < current_down:
-                print(f"\nSkip missing shutdown for boot at: {current_up}")
+                logger.warning(f"Skip missing shutdown for boot at: {current_up}")
                 up_idx += 1
                 continue
 
@@ -87,7 +85,7 @@ def correct_list(up, down):
             down_idx += 1
         else:
             # Down event before Up event, or missing Up
-            print(f"\nSkip missing boot for shutdown at: {current_down}")
+            logger.warning(f"Skip missing boot for shutdown at: {current_down}")
             down_idx += 1
 
     return new_up, new_down
@@ -101,13 +99,13 @@ def get_bootlist(boot_amount: int) -> list[Boot]:
     output, err = p.communicate()
     exitcode = p.wait()
     if exitcode != 0:
-        print("Error with systemd")
+        logger.error("Error with systemd")
         sys.exit(1)
 
     try:
         data = json.loads(output)
     except json.JSONDecodeError:
-        print("Error parsing journalctl output")
+        logger.error("Error parsing journalctl output")
         sys.exit(1)
 
     boot_list = []
@@ -180,45 +178,49 @@ def get_wake_sleep(boot: Boot):
     return boot
 
 
-def parser() -> int:
+def parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="listing past uptimes of systemd")
     parser.add_argument(
         "-b",
         "--boot",
         type=int,
         default=0,
-        dest="amount",
-        help="number of boots beeing processed (0 for all)",
+        help="number of boots being processed (0 for all)",
     )
-    parser.add_argument(
+    
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "-v", "--verbose", action="store_true", default=False, help="verbose output"
     )
-    parser.add_argument(
+    group.add_argument(
         "-q", "--quiet", action="store_true", default=False, help="less output"
     )
+    
     parser.add_argument(
         "-s", "--seconds", action="store_true", default=False, help="output in seconds"
     )
 
-    args = parser.parse_args()
-    boot_amount = int(args.amount)
-    seconds = bool(args.seconds)
-    verbose = bool(args.verbose)
-    quiet = bool(args.quiet)
-
-    return boot_amount, seconds, verbose, quiet
+    return parser.parse_args()
 
 
 def main():
-    boot_amount, seconds, verbose, quiet = parser()
+    args = parser()
 
-    raw_boot_list = get_bootlist(boot_amount)
+    log_level = logging.INFO
+    if args.quiet:
+        log_level = logging.ERROR
+    elif args.verbose:
+        log_level = logging.DEBUG
+
+    logging.basicConfig(level=log_level, format="%(message)s")
+
+    raw_boot_list = get_bootlist(args.boot)
     boot_list = [get_wake_sleep(boot) for boot in raw_boot_list]
 
     total = sum(
-        (boot.total_uptime(quiet, verbose) for boot in boot_list), datetime.timedelta(0)
+        (boot.total_uptime() for boot in boot_list), datetime.timedelta(0)
     )
-    worktime_str = str(int(total.total_seconds())) if seconds else str(total)
+    worktime_str = str(int(total.total_seconds())) if args.seconds else str(total)
     print(f"\nWorktime: {worktime_str}")
 
 
