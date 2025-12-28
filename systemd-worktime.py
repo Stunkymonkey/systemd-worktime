@@ -69,7 +69,8 @@ def correct_list(up, down):
     while True:
         # leave out all boot that have not a direct shutdown behind
         while (up_index < len(up) - 1) and (up[up_index + 1] < down[down_index]):
-            print("skip boot:", up[up_index], "(direct shutdown was not found)")
+            print("\nskip boot:", up[up_index], "(direct shutdown was not found)")
+            print(up, down)
             up_index += 1
         # add valid boot and shutdown
         if down[down_index] > up[up_index]:
@@ -81,7 +82,8 @@ def correct_list(up, down):
             break
         # leave out all shutdown out without boots
         while up[up_index] > down[down_index]:
-            print("skip shutdown:", down[down_index], "(direct boot was not found)")
+            print("\nskip shutdown:", down[down_index], "(direct boot was not found)")
+            print(up, down)
             down_index += 1
 
     return new_up, new_down
@@ -91,7 +93,7 @@ def get_bootlist(boot_amount: int) -> list[Boot]:
     """
     return all boots of the system
     """
-    p = Popen(['journalctl', '--list-boots', '--output=json'], stdout=PIPE)
+    p = Popen(["journalctl", "--list-boots", "--output=json"], stdout=PIPE)
     output, err = p.communicate()
     exitcode = p.wait()
     if exitcode != 0:
@@ -106,18 +108,20 @@ def get_bootlist(boot_amount: int) -> list[Boot]:
 
     boot_list = []
     for entry in data:
-        bootid = entry['boot_id']
+        bootid = entry["boot_id"]
         # timestamps are in microseconds
         bootup_date = datetime.datetime.fromtimestamp(
-            entry['first_entry'] / 1e6, tz=datetime.timezone.utc)
+            entry["first_entry"] / 1e6, tz=datetime.timezone.utc
+        ).replace(microsecond=0)
         shutdown_date = datetime.datetime.fromtimestamp(
-            entry['last_entry'] / 1e6, tz=datetime.timezone.utc)
-        boot_list.append([bootid, bootup_date, shutdown_date])
+            entry["last_entry"] / 1e6, tz=datetime.timezone.utc
+        ).replace(microsecond=0)
+        boot_list.append(Boot(bootid, bootup_date, shutdown_date))
 
     if boot_amount != 0:
         amount = len(boot_list)
         if boot_amount < amount:
-            del boot_list[:(amount - boot_amount)]
+            del boot_list[: (amount - boot_amount)]
 
     return boot_list
 
@@ -132,22 +136,21 @@ def get_wake_sleep(boot: Boot):
     suspendStartList = [
         "Entering sleep state 'suspend'...",
         "Reached target Sleep.",
-        "PM: suspend entry (deep)"
+        "PM: suspend entry (deep)",
     ]
-    hibernateStartList = [
-        "Suspending system...",
-        "PM: hibernation: hibernation entry"
-    ]
+    hibernateStartList = ["Suspending system...", "PM: hibernation: hibernation entry"]
     suspendWakeList = [
         "ACPI: PM: Waking up from system sleep state S3",
-        "ACPI: Waking up from system sleep state S3"
+        "ACPI: Waking up from system sleep state S3",
     ]
     hibernateWakeList = [
         "ACPI: PM: Waking up from system sleep state S4",
-        "ACPI: Waking up from system sleep state S4"
+        "ACPI: Waking up from system sleep state S4",
     ]
 
-    for item in (hibernateStartList + suspendStartList + suspendWakeList + hibernateWakeList):
+    for item in (
+        hibernateStartList + suspendStartList + suspendWakeList + hibernateWakeList
+    ):
         j.add_match(f"MESSAGE={item}")
         j.add_disjunction()
 
@@ -217,5 +220,5 @@ def main():
     print(f"\nWorktime: {worktime_str}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
