@@ -4,6 +4,7 @@ import datetime
 import argparse
 from subprocess import Popen, PIPE
 import sys
+import json
 
 verbose = False
 quiet = False
@@ -69,28 +70,33 @@ def get_bootlist(boot_amount):
     """
     return all boots of the system
     """
-    p = Popen(['journalctl --list-boots'], stdout=PIPE, shell=True)
+    p = Popen(['journalctl', '--list-boots', '--output=json'], stdout=PIPE)
     output, err = p.communicate()
     exitcode = p.wait()
     if exitcode != 0:
         print("Error with systemd")
         sys.exit(1)
 
-    amount = -int(output.rstrip().split()[0].decode())
-    boot_list = []
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        print("Error parsing journalctl output")
+        sys.exit(1)
 
-    for line in output.splitlines():
-        boot = line.rstrip().decode().split()
-        bootid = str(boot[1])
-        bootup = str(boot[3] + "." + boot[4])
-        shutdown = str(boot[6] + "." + boot[7])
-        bootup_date = datetime.datetime.strptime(bootup, '%Y-%m-%d.%H:%M:%S')
-        shutdown_date = datetime.datetime.strptime(
-            shutdown, '%Y-%m-%d.%H:%M:%S')
+    boot_list = []
+    for entry in data:
+        bootid = entry['boot_id']
+        # timestamps are in microseconds
+        bootup_date = datetime.datetime.fromtimestamp(
+            entry['first_entry'] / 1e6, tz=datetime.timezone.utc)
+        shutdown_date = datetime.datetime.fromtimestamp(
+            entry['last_entry'] / 1e6, tz=datetime.timezone.utc)
         boot_list.append([bootid, bootup_date, shutdown_date])
 
     if boot_amount != 0:
-        del boot_list[:(amount - boot_amount + 1)]
+        amount = len(boot_list)
+        if boot_amount < amount:
+            del boot_list[:(amount - boot_amount)]
 
     return boot_list
 
