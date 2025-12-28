@@ -29,8 +29,19 @@
           program = "${systemd-worktime}/bin/systemd-worktime";
         };
 
+        checks = {
+          ruff = pkgs.runCommand "ruff-check"
+            {
+              nativeBuildInputs = [ pkgs.ruff ];
+            } ''
+            ruff check ${./.}
+            touch $out
+          '';
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = [ pythonEnv ];
+          nativeBuildInputs = [ pkgs.ruff ];
         };
       }
     );
