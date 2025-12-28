@@ -60,31 +60,35 @@ class Boot:
 
 def correct_list(up, down):
     """
-    correcting uneven lists
+    Synchronizes 'up' and 'down' lists to ensure they have matching pairs.
+    Handles cases where journal entries might be missing.
     """
-    new_up = list()
-    new_down = list()
+    new_up = []
+    new_down = []
 
-    up_index, down_index = 0, 0
-    while True:
-        # leave out all boot that have not a direct shutdown behind
-        while (up_index < len(up) - 1) and (up[up_index + 1] < down[down_index]):
-            print("\nskip boot:", up[up_index], "(direct shutdown was not found)")
-            print(up, down)
-            up_index += 1
-        # add valid boot and shutdown
-        if down[down_index] > up[up_index]:
-            new_down.append(down[down_index])
-            new_up.append(up[up_index])
-            up_index += 1
-            down_index += 1
-        if up_index >= len(up):
-            break
-        # leave out all shutdown out without boots
-        while up[up_index] > down[down_index]:
-            print("\nskip shutdown:", down[down_index], "(direct boot was not found)")
-            print(up, down)
-            down_index += 1
+    up_idx = 0
+    down_idx = 0
+
+    while up_idx < len(up) and down_idx < len(down):
+        current_up = up[up_idx]
+        current_down = down[down_idx]
+
+        if current_up < current_down:
+            # Check if there's a subsequent 'up' before this 'down'
+            if up_idx + 1 < len(up) and up[up_idx + 1] < current_down:
+                print(f"\nSkip missing shutdown for boot at: {current_up}")
+                up_idx += 1
+                continue
+
+            # Valid pair
+            new_up.append(current_up)
+            new_down.append(current_down)
+            up_idx += 1
+            down_idx += 1
+        else:
+            # Down event before Up event, or missing Up
+            print(f"\nSkip missing boot for shutdown at: {current_down}")
+            down_idx += 1
 
     return new_up, new_down
 
@@ -208,10 +212,8 @@ def parser() -> int:
 def main():
     boot_amount, seconds, verbose, quiet = parser()
 
-    boot_list = get_bootlist(boot_amount)
-
-    for boot in boot_list:
-        boot = get_wake_sleep(boot)
+    raw_boot_list = get_bootlist(boot_amount)
+    boot_list = [get_wake_sleep(boot) for boot in raw_boot_list]
 
     total = sum(
         (boot.total_uptime(quiet, verbose) for boot in boot_list), datetime.timedelta(0)
