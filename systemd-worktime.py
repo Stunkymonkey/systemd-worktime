@@ -105,32 +105,42 @@ def get_wake_sleep():
     j = journal.Reader(journal.SYSTEM)
     j.log_level(journal.LOG_DEBUG)
 
-    j.add_match("MESSAGE=Suspending system...")
-    j.add_disjunction()
-    j.add_match("MESSAGE=PM: Finishing wakeup.")
-    j.add_disjunction()
-    j.add_match("MESSAGE=PM: hibernation exit")
+    # Patterns for suspend and resume/wake events
+    suspendStartList = [
+        "Entering sleep state 'suspend'...",
+        "Reached target Sleep.",
+        "PM: suspend entry (deep)"
+    ]
+    hibernateStartList = [
+        "Suspending system...",
+        "PM: hibernation: hibernation entry"
+    ]
+    suspendWakeList = [
+        "ACPI: PM: Waking up from system sleep state S3",
+        "ACPI: Waking up from system sleep state S3"
+    ]
+    hibernateWakeList = [
+        "ACPI: PM: Waking up from system sleep state S4",
+        "ACPI: Waking up from system sleep state S4"
+    ]
+
+    for item in (hibernateStartList + suspendStartList + suspendWakeList + hibernateWakeList):
+        j.add_match(f"MESSAGE={item}")
+        j.add_disjunction()
 
     suspendTimes = []
     wakeTimes = []
 
     for entry in j:
         try:
-            # print(str(entry['__REALTIME_TIMESTAMP'] )+ ' ' + entry['MESSAGE'])
-            if "Suspending system..." in str(entry['MESSAGE']):
+            msg = str(entry.get('MESSAGE', ''))
+
+            if any(p in msg for p in suspendStartList + hibernateStartList):
                 suspendTimes.append(
-                    entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
-                continue
-            elif "Finishing wakeup" in str(entry['MESSAGE']):
+                    entry['__REALTIME_TIMESTAMP'].astimezone(datetime.timezone.utc).replace(microsecond=0))
+            elif any(p in msg for p in suspendWakeList + hibernateWakeList):
                 wakeTimes.append(
-                    entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
-                continue
-            elif "hibernation exit" in str(entry['MESSAGE']):
-                wakeTimes.append(
-                    entry['__REALTIME_TIMESTAMP'].replace(microsecond=0))
-                continue
-            else:
-                print(str(entry['MESSAGE']))
+                    entry['__REALTIME_TIMESTAMP'].astimezone(datetime.timezone.utc).replace(microsecond=0))
         except:
             continue
     j.close()
