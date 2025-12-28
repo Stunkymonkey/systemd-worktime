@@ -6,9 +6,56 @@ from subprocess import Popen, PIPE
 import sys
 import json
 
-verbose = False
-quiet = False
-seconds = False
+
+class Boot:
+    def __init__(self, bootid, bootup, shutdown):
+        self.bootid = bootid
+        self.bootup = bootup
+        self.shutdown = shutdown
+        self.suspendTimes = []
+        self.wakeTimes = []
+
+    def __str__(self):
+        return "Boot: {tboot} -> {tshut}".format(tboot=self.bootup, tshut=self.shutdown)
+
+    def add_suspend(self, suspend):
+        self.suspendTimes.append(suspend)
+        self.suspendTimes.sort()
+
+    def add_wake(self, wake):
+        self.wakeTimes.append(wake)
+        self.wakeTimes.sort()
+
+    def total_uptime(
+        self, quiet: bool = False, verbose: bool = False
+    ) -> datetime.timedelta:
+        """
+        Calculate the total uptime for this boot session, considering suspends/wakes.
+        """
+        # Build start and end lists
+        up_times = [self.bootup] + self.wakeTimes
+        down_times = self.suspendTimes + [self.shutdown]
+
+        # Ensure equal length
+        if len(up_times) != len(down_times):
+            up_times, down_times = correct_list(up_times, down_times)
+
+        # Print info
+        if not quiet:
+            print(f"\nBoot {self.bootid}: {up_times[0]} -> {down_times[-1]}")
+            if verbose:
+                for start, end in zip(up_times, down_times):
+                    print(f"\tWork: {start} -> {end}")
+
+        # Sum all uptimes
+        total = datetime.timedelta(0)
+        for start, end in zip(up_times, down_times):
+            total += end - start
+
+        if not quiet:
+            print(total)
+
+        return total
 
 
 def correct_list(up, down):
@@ -40,33 +87,7 @@ def correct_list(up, down):
     return new_up, new_down
 
 
-def one_boot(boot, shut, susp, wake):
-    """
-    calculating the timedelta of one boot
-    """
-    up = [boot] + wake
-    down = susp + [shut]
-
-    if len(wake) is not len(susp):
-        up, down = correct_list(up, down)
-
-    if not quiet:
-        print("Boot: {tboot} -> {tshut}".format(tboot=up[0], tshut=down[-1]))
-        if verbose:
-            for (s, e) in zip(up, down):
-                print("  Work: {start} -> {end}".format(start=s, end=e))
-
-    sum = datetime.timedelta(0, 0)
-    for (u, d) in zip(up, down):
-        sum += d - u
-    if not quiet:
-        print(sum)
-        print()
-
-    return sum
-
-
-def get_bootlist(boot_amount):
+def get_bootlist(boot_amount: int) -> list[Boot]:
     """
     return all boots of the system
     """
@@ -101,8 +122,10 @@ def get_bootlist(boot_amount):
     return boot_list
 
 
-def get_wake_sleep():
+def get_wake_sleep(boot: Boot):
     j = journal.Reader(journal.SYSTEM)
+    j.this_boot(boot.bootid)
+    j.add_conjunction()
     j.log_level(journal.LOG_DEBUG)
 
     # Patterns for suspend and resume/wake events
@@ -128,79 +151,70 @@ def get_wake_sleep():
         j.add_match(f"MESSAGE={item}")
         j.add_disjunction()
 
-    suspendTimes = []
-    wakeTimes = []
-
     for entry in j:
         try:
-            msg = str(entry.get('MESSAGE', ''))
-
-            if any(p in msg for p in suspendStartList + hibernateStartList):
-                suspendTimes.append(
-                    entry['__REALTIME_TIMESTAMP'].astimezone(datetime.timezone.utc).replace(microsecond=0))
-            elif any(p in msg for p in suspendWakeList + hibernateWakeList):
-                wakeTimes.append(
-                    entry['__REALTIME_TIMESTAMP'].astimezone(datetime.timezone.utc).replace(microsecond=0))
-        except:
+            msg = str(entry.get("MESSAGE", ""))
+        except KeyError:
             continue
+        if any(p in msg for p in suspendStartList + hibernateStartList):
+            boot.add_suspend(
+                entry["__REALTIME_TIMESTAMP"]
+                .astimezone(datetime.timezone.utc)
+                .replace(microsecond=0)
+            )
+        elif any(p in msg for p in suspendWakeList + hibernateWakeList):
+            boot.add_wake(
+                entry["__REALTIME_TIMESTAMP"]
+                .astimezone(datetime.timezone.utc)
+                .replace(microsecond=0)
+            )
     j.close()
 
-    return suspendTimes, wakeTimes
+    return boot
 
 
-def parser():
-    parser = argparse.ArgumentParser(
-        description='listing past uptimes of systemd')
-    parser.add_argument("-b", "--boot",
-                        type=int,
-                        default=0,
-                        dest="amount",
-                        help="number of boots beeing processed (0 for all)")
-    parser.add_argument("-v", "--verbose", action="store_true", default=False,
-                        help="verbose output")
-    parser.add_argument("-q", "--quiet", action="store_true", default=False,
-                        help="less output")
-    parser.add_argument("-s", "--seconds", action="store_true", default=False,
-                        help="output in seconds")
+def parser() -> int:
+    parser = argparse.ArgumentParser(description="listing past uptimes of systemd")
+    parser.add_argument(
+        "-b",
+        "--boot",
+        type=int,
+        default=0,
+        dest="amount",
+        help="number of boots beeing processed (0 for all)",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", default=False, help="verbose output"
+    )
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", default=False, help="less output"
+    )
+    parser.add_argument(
+        "-s", "--seconds", action="store_true", default=False, help="output in seconds"
+    )
 
     args = parser.parse_args()
     boot_amount = int(args.amount)
-    global seconds
     seconds = bool(args.seconds)
-    global verbose
     verbose = bool(args.verbose)
-    global quiet
     quiet = bool(args.quiet)
 
-    return boot_amount
+    return boot_amount, seconds, verbose, quiet
 
 
 def main():
-    boot_amount = parser()
+    boot_amount, seconds, verbose, quiet = parser()
 
     boot_list = get_bootlist(boot_amount)
 
-    suspendTimes, wakeTimes = get_wake_sleep()
-
-    suspendTimes.sort()
-    wakeTimes.sort()
-
-    sum = datetime.timedelta(0, 0)
-
     for boot in boot_list:
-        susp = []
-        wake = []
-        for (i, j) in zip(suspendTimes, wakeTimes):
-            if boot[1] < i and i < boot[2]:
-                susp.append(i)
-            if boot[1] < j and j < boot[2]:
-                wake.append(j)
-        sum += one_boot(boot[1], boot[2], susp, wake)
+        boot = get_wake_sleep(boot)
 
-    if seconds:
-        print(int(sum.total_seconds()))
-    else:
-        print("Worktime:", sum)
+    total = sum(
+        (boot.total_uptime(quiet, verbose) for boot in boot_list), datetime.timedelta(0)
+    )
+    worktime_str = str(int(total.total_seconds())) if seconds else str(total)
+    print(f"\nWorktime: {worktime_str}")
 
 
 if __name__ == '__main__':
