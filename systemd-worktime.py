@@ -37,21 +37,26 @@ class Boot:
         up_times = [self.bootup] + self.wakeTimes
         down_times = self.suspendTimes + [self.shutdown]
 
+        skips = []
         # Ensure equal length
         if len(up_times) != len(down_times):
-            up_times, down_times = correct_list(up_times, down_times)
+            up_times, down_times, skips = correct_list(up_times, down_times)
 
         # Print info
-        logger.info(f"Boot {self.bootid}: {up_times[0]} -> {down_times[-1]}")
+        logger.info("-" * 20)
+        logger.info(f"Boot ID: {self.bootid}")
+        for skip in skips:
+            logger.warning(f"  [!] {skip}")
+        logger.info(f"Range:   {self.bootup} -> {self.shutdown}")
         for start, end in zip(up_times, down_times):
-            logger.debug(f"\tWork: {start} -> {end}")
+            logger.debug(f"  Work Interval: {start} -> {end}")
 
         # Sum all uptimes
         total = datetime.timedelta(0)
         for start, end in zip(up_times, down_times):
             total += end - start
 
-        logger.info(total)
+        logger.info(f"Uptime:  {total}")
 
         return total
 
@@ -63,6 +68,7 @@ def correct_list(up, down):
     """
     new_up = []
     new_down = []
+    skips = []
 
     up_idx = 0
     down_idx = 0
@@ -74,7 +80,7 @@ def correct_list(up, down):
         if current_up < current_down:
             # Check if there's a subsequent 'up' before this 'down'
             if up_idx + 1 < len(up) and up[up_idx + 1] < current_down:
-                logger.warning(f"Skip missing shutdown for boot at: {current_up}")
+                skips.append(f"Missing shutdown for boot at: {current_up}")
                 up_idx += 1
                 continue
 
@@ -85,10 +91,10 @@ def correct_list(up, down):
             down_idx += 1
         else:
             # Down event before Up event, or missing Up
-            logger.warning(f"Skip missing boot for shutdown at: {current_down}")
+            skips.append(f"Missing boot for shutdown at: {current_down}")
             down_idx += 1
 
-    return new_up, new_down
+    return new_up, new_down, skips
 
 
 def get_bootlist(boot_amount: int) -> list[Boot]:
@@ -187,7 +193,6 @@ def parser() -> argparse.Namespace:
         default=0,
         help="number of boots being processed (0 for all)",
     )
-    
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "-v", "--verbose", action="store_true", default=False, help="verbose output"
@@ -221,7 +226,10 @@ def main():
         (boot.total_uptime() for boot in boot_list), datetime.timedelta(0)
     )
     worktime_str = str(int(total.total_seconds())) if args.seconds else str(total)
-    print(f"\nWorktime: {worktime_str}")
+    
+    if not args.quiet:
+        print("=" * 40)
+    print(f"Total Worktime: {worktime_str}")
 
 
 if __name__ == "__main__":
